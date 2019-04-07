@@ -4,23 +4,23 @@
 (function(){
 
 	//Pseudo-global variables
-	let attrArray = ["pop_est", "gdp_md_est"]; //List of attributes
+	let attrArray = ["2018_ZHVI_ALL", "2018_ZHVI_SFR", "2018_ZHVI_CONDO", "2018_MED_VAL_SF", "2018_PCT_HOMES_INC_VAL", "2018_PCT_HOMES_DEC_VAL"]; //List of attributes
 	let expressed = attrArray[0]; //Initial attribute
 
 	//Chart frame dimensions
 	let chartWidth = window.innerWidth * 0.425,
-		chartHeight = 460,
-		leftPadding = 25,
-		rightPadding = 2,
-		topBottomPadding = 5,
+		chartHeight = 600,
+		leftPadding = 50,
+		rightPadding = 5,
+		topPadding = 5,
 		chartInnerWidth = chartWidth - leftPadding - rightPadding,
-		chartInnerHeight = chartHeight - topBottomPadding * 2,
-		translate = "translate(" + leftPadding + "," + topBottomPadding + ")";
+		chartInnerHeight = chartHeight - topPadding - 5,
+		translate = "translate(" + leftPadding + "," + topPadding + ")";
 
 	//Create a scale to size bars proportionally to frame
 	let yScale = d3.scaleLinear()
-		.range([0, 450])
-		.domain([0, 90000000]);
+		.range([0, 595])
+		.domain([0, 800000]);  //<--THIS NEEDS TO BE DYNAMIC!!!
 
 //Begin script when window loads
 	window.onload = setMap();
@@ -29,7 +29,7 @@
 
 		//Map frame dimensions
 		let width = window.innerWidth * 0.5;
-		let height = 460;
+		let height = 600;
 
 		//Create a new svg container for the map
 		let map = d3.select("body")
@@ -39,99 +39,96 @@
 			.attr("height", height);
 
 		//Create Albers equal area conic projection centered on France
-		let projection = d3.geoAlbers()
-			.center([0, 46.2])
-			.rotate([-2, 0, 0])
-			.parallels([43, 62])
-			.scale(2500)
-			.translate([width / 2, height / 2]);
+		let projection = d3.geoMercator()
+			.center([-77.4824, 38.81709])
+			.scale(15000)
+			.translate([width / 2, height / 1.9]);
 
 		let path = d3.geoPath()
 			.projection(projection);
 
-
-		setGraticule(map, path);
-
 		//Use promises instead of queue to parallelize asynchronous data loading
-		let europeCountriesData = d3.csv("data/EuropeCountries.csv");
-		let europeCountriesGeo = d3.json("data/EuropeCountries_Geo.topojson");
-		let franceRegionsGeo = d3.json("data/FranceRegions_Geo.topojson");
+		let zillowData = d3.csv("data/DMV_Counties_Joined.csv");
+		console.log("Pending zillowData promise: ", zillowData);
+		let dmvStatesTopo = d3.json("data/DMV_States.topojson");
+		console.log("Pending statesTopo promise: ", dmvStatesTopo);
+		let dmvMSATopo = d3.json("data/DMV_MSA.topojson");
+		console.log("Pending dmvMSATopo promise: ", dmvMSATopo);
+		let dmvCountiesTopo = d3.json("data/DMV_Counties_Min.topojson");
+		console.log("Pending countiesTopo promise: ", dmvCountiesTopo);
 
-		promises = [europeCountriesData, europeCountriesGeo, franceRegionsGeo];
+		promises = [zillowData, dmvStatesTopo, dmvMSATopo, dmvCountiesTopo];
+		console.log("Pending promises array: ", promises);
 
 		Promise.all(promises).then(function (values) {
-			let europeCountriesData = values[0];
-			let europeCountries = topojson.feature(values[1], values[1].objects.EuropeCountries_Geo);
-			let franceRegions = topojson.feature(values[2], values[2].objects.FranceRegions).features;
+			console.log("Resolved promises array: ", promises);
+			let zillowData = values[0];
+			console.log("Resolved zillowData array: ", zillowData);
+			let dmvStatesGeo = topojson.feature(values[1], values[1].objects.DMV_States).features;
+			console.log("Resolved states object: ", dmvStatesGeo);
+			let dmvMSAGeo = topojson.feature(values[2], values[2].objects.DMV_MSA).features;
+			console.log("Resolved dmvMSA object: ", dmvMSAGeo);
+			let dmvCountiesGeo = topojson.feature(values[3], values[3].objects.DMV_Counties_Min);
+			console.log("Resolved counties object: ", dmvCountiesGeo);
 
 			//Join csv data to GeoJson enumeration units
-			joinData(europeCountries, europeCountriesData);
+			joinData(dmvCountiesGeo, zillowData);
+			console.log("Joined Counties Data: ", dmvCountiesGeo);
 
 			//Create color scale
-			let colorScale = makeColorScale(europeCountriesData);
+			let colorScale = makeColorScale(zillowData);
 			console.log(colorScale);
 
 			//Add enumeration units to the map
-			setEnumerationUnits(europeCountries, map, path, colorScale);
+			setEnumerationUnits(dmvCountiesGeo, map, path, colorScale);
 
-/*			//Add France regions to the map
-			let regions = map.selectAll(".regions")
-				.data(franceRegions)
+			//Add states to the map
+			let dmvStates = map.selectAll(".dmvStates")
+				.data(dmvStatesGeo)
 				.enter()
 				.append("path")
 				.attr("class", function (d) {
-					return "regions " + d.properties.adm1_code;
+					return "dmvStates " + d.properties.NAME;
 				})
-				.attr("d", path);*/
+				.attr("d", path);
+
+			//Add DMV MSA to the map
+			let dmvMSA = map.selectAll(".dmvMSA")
+				.data(dmvMSAGeo)
+				.enter()
+				.append("path")
+				.attr("class", function (d) {
+					return "dmvMSA " + d.properties.NAME;
+				})
+				.attr("d", path);
 
 			//Add coordinated visualization to the map
-			setChart(europeCountriesData, colorScale);
+			setChart(zillowData, colorScale);
 
 			//Add dropdown to the map
-			createDropdown(attrArray, europeCountriesData);
+			createDropdown(attrArray, zillowData);
 		});
 	}; //End of setMap()
 
-	function setGraticule(map, path) {
-		//Create graticule generator
-		let graticule = d3.geoGraticule()
-			.step([5, 5]); //Place graticule lines every 5 degrees of longitude and latitude
+	function joinData(dmvCountiesGeo, zillowData){
+		//Loop through csv to assign each set of csv attribute values to geojson county
+		for (let i = 0; i < zillowData.length; i++) {
+			console.log(zillowData[i]);
+			let csvCounty = zillowData[i]; //The current county
+			let csvKey = csvCounty.CountyFIPS; //The CSV primary key
 
-		//Create graticule background
-		let gratBackground = map.append("path")
-			.datum(graticule.outline()) //Bind graticule background
-			.attr("class", "gratBackground") //Assign class for styling
-			.attr("d", path); //Project graticule
+			//Loop through geojson counties to find the correct county
+			for (let a = 0; a < dmvCountiesGeo.features.length; a++) {
+				//console.log(counties.features[a]);
+				let geojsonProps = dmvCountiesGeo.features[a].properties; //The current county geojson properties
+				let geojsonKey = geojsonProps.CountyFIPS; //The geojson primary key
 
-		//Create graticule lines
-		let gratLines = map.selectAll(".gratLines") //Select graticule elements that will be created
-			.data(graticule.lines()) //Bind graticule lines to each element to be created
-			.enter() //Create an element for each datum
-			.append("path") //Append each element to the svg as a path element
-			.attr("class", "gratLines") //Assign class for styling
-			.attr("d", path); //Project graticule lines
-	};
-
-	function joinData(europeCountries, europeCountriesData){
-		//Loop through csv to assign each set of csv attribute values to geojson country
-		for (let i = 0; i < europeCountriesData.length; i++) {
-			//console.log(europeCountriesData[i]);
-			let csvCountry = europeCountriesData[i]; //The current country
-			let csvKey = csvCountry.name; //The CSV primary key
-			//console.log(csvKey);
-
-			//Loop through geojson countries to find the correct country
-			for (let a = 0; a < europeCountries.features.length; a++) {
-				//console.log(europeCountries.features[a]);
-				let geojsonProps = europeCountries.features[a].properties; //The current country geojson properties
-				let geojsonKey = geojsonProps.name; //The geojson primary key
-				//console.log(geojsonKey);
 
 				//Where primary keys match, transfer csv data to geojson properties object
 				if (geojsonKey == csvKey) {
 					//Assign all attributes and values
 					attrArray.forEach(function (attr) {
-						let val = parseInt(csvCountry[attr]); //Get csv attribute value
+						let val = parseInt(csvCounty[attr]); //Get csv attribute value
 						geojsonProps[attr] = val; //Assign attribute and value to geojson properties
 					});
 				};
@@ -139,22 +136,13 @@
 		};
 	};
 
-	function setEnumerationUnits(europeCountries, map, path, colorScale){
-		//Add Europe countries to the map
-/*		let countries = map.append("path")
-			.datum(europeCountries)
-			.attr("class", "countries")
-			.attr("d", path)
-			.style("fill", function(d){
-				console.log(d);
-				return colorScale(d.properties[expressed]);
-			});*/
-		let countries = map.selectAll(".countries")
-			.data(europeCountries.features)
+	function setEnumerationUnits(dmvCountiesGeo, map, path, colorScale){
+		let counties = map.selectAll(".counties")
+			.data(dmvCountiesGeo.features)
 			.enter()
 			.append("path")
 			.attr("class", function(d){
-				return "countries " + d.properties.name;
+				return "counties " + d.properties.NAMELSAD_MIN;
 			})
 			.attr("d", path)
 			.style("fill", function(d){
@@ -168,24 +156,27 @@
 			})
 			.on("mousemove", moveLabel);
 
+		console.log(counties);
+
 		//Add style descriptor to each path
-		let desc = countries.append("desc")
-			.text('{"stroke": "#000", "stroke-width": "0.5px"}');
+		let desc = counties.append("desc")
+			.text('{"stroke": "#000", "stroke-width": "1px"}');
 	};
 
 	//Function to create color scale generator
 	function makeColorScale(data){
 		let colorClasses = [
-			"#D4B9DA",
-			"#C994C7",
-			"#DF65B0",
-			"#DD1C77",
-			"#980043"
+			"#eff3ff",
+			"#bdd7e7",
+			"#6baed6",
+			"#3182bd",
+			"#08519c"
 		];
 
 		//Create color scale generator
 		let colorScale = d3.scaleThreshold()
 			.range(colorClasses);
+		console.log(colorScale);
 
 		//Build array of all values of the expressed attribute
 		let domainArray = [];
@@ -215,16 +206,16 @@
 		//Make sure attribute value is a number
 		let val = parseInt(props[expressed]);
 
-		//If attribute value exists, assign a color; otherwise assign gray
-		if (typeof val == "number" && !isNaN(val)){
+		//If attribute value exists, assign a color; otherwise assign black
+		if (typeof val == "number" && val != 0){
 			return colorScale(val);
 		}else{
-			return "#CCC";
+			return "#000000";
 		};
 	};
 
 	//Function to create the coordinated bar chart
-	function setChart(europeCountriesData, colorScale){
+	function setChart(zillowData, colorScale){
 		//Create a second svg element to hold the bar chart
 		let chart = d3.select("body")
 			.append("svg")
@@ -239,18 +230,18 @@
 			.attr("height", chartInnerHeight)
 			.attr("transform", translate);
 
-		//Set bars for each country
+		//Set bars for each county
 		let bars = chart.selectAll(".bars")
-			.data(europeCountriesData)
+			.data(zillowData)
 			.enter()
 			.append("rect")
 			.sort(function(a, b){
 				return b[expressed] - a[expressed]
 			})
 			.attr("class", function(d){
-				return "bars " + d.name;
+				return "bars " + d.NAMELSAD_MIN;
 			})
-			.attr("width", chartInnerWidth / europeCountriesData.length - 1)
+			.attr("width", chartInnerWidth / zillowData.length - 1)
 			.on("mouseover", highlight)
 			.on("mouseout", dehighlight)
 			.on("mousemove", moveLabel);
@@ -261,14 +252,13 @@
 
 		//Create text element for the chart title
 		let chartTitle = chart.append("text")
-			.attr("x", 60)
+			.attr("x", 175)
 			.attr("y", 60)
 			.attr("class", "chartTitle")
-			.text("Estimated Population in each country (thousands)");
 
 		//Create vertical axis generator
 		let yAxis = d3.axisLeft()
-			.scale(d3.scaleLinear().range([450,0]).domain([0,900]));
+			.scale(d3.scaleLinear().range([590,0]).domain([0,800000]));
 
 		//Place axis
 		let axis = chart.append("g")
@@ -283,17 +273,17 @@
 			.attr("height", chartInnerHeight)
 			.attr("transform", translate);
 
-		updateChart(bars, europeCountriesData.length, colorScale);
+		updateChart(bars, zillowData.length, colorScale);
 	}; //End of setChart()
 
 	//Function to create a dropdown menu for attribute selection
-	function createDropdown(attrArray, europeCountriesData) {
+	function createDropdown(attrArray, zillowData) {
 		//Add select element
 		let dropdown = d3.select("body")
 			.append("select")
 			.attr("class", "dropdown")
 			.on("change", function () {
-				changeAttribute(this.value, europeCountriesData)
+				changeAttribute(this.value, zillowData)
 			});
 
 		//Add initial option
@@ -316,16 +306,16 @@
 	};
 
 	//Dropdown change listener handler
-	function changeAttribute(attribute, europeCountriesData){
+	function changeAttribute(attribute, zillowData){
 		//Change the expressed attribute
 		expressed = attribute;
 
 		//Recreate the color scale
-		let colorScale = makeColorScale(europeCountriesData);
+		let colorScale = makeColorScale(zillowData);
 		console.log(colorScale);
 
 		//Recolor enumeration units
-		let countries = d3.selectAll(".countries")
+		let counties = d3.selectAll(".counties")
 			.transition()
 			.duration(1000)
 			.style("fill", function(d){
@@ -336,7 +326,7 @@
 		let bars = d3.selectAll(".bars")
 		//Re-sort bars
 			.sort(function(a, b){
-				return b[expressed] - b[expressed];
+				return b[expressed] - a[expressed];
 			})
 			.transition()
 			.delay(function(d, i){
@@ -344,7 +334,7 @@
 			})
 			.duration(500);
 
-		updateChart(bars, europeCountriesData.length, colorScale);
+		updateChart(bars, zillowData.length, colorScale);
 	}; //End of changeAttribute()
 
 	function updateChart(bars, n, colorScale){
@@ -354,31 +344,46 @@
 			})
 			//Size/resize bars
 			.attr("height", function(d, i){
+				console.log([expressed]);
 				return yScale(parseInt(d[expressed]));
 			})
 			.attr("y", function(d){
-				return 450 - yScale(parseInt(d[expressed])) + topBottomPadding;
+				return 590 - yScale(parseInt(d[expressed])) + topPadding;
 			})
 			.style("fill", function(d){
 				return choropleth(d, colorScale);
 			})
 		let chartTitle = d3.select(".chartTitle")
-			.text("Estimated Population in each country (thousands)");
+			.text(function(d){
+				if ([expressed] == "2018_ZHVI_ALL"){
+					return "2018 Average ZHVI (All Homes)";
+				} if ([expressed] == "2018_ZHVI_SFR"){
+					return "2018 Average ZHVI (Single Family Residences)";
+				} if ([expressed] == "2018_ZHVI_CONDO"){
+					return "2018 Average ZHVI (Condominiums)";
+				} if ([expressed] == "2018_MED_VAL_SF"){
+					return "2018 Median Home Value per Square Foot";
+				} if ([expressed] == "2018_PCT_HOMES_INC_VAL"){
+					return "2018 Percent of Homes Increased in Value";
+				} if ([expressed] == "2018_PCT_HOMES_DEC_VAL"){
+					return "2018 Percent of Homes Decreased in Value";
+				};
+			});
 	}
 
 	//Function to highlight enumeration units and bars
 	function highlight(props){
 		//Change stroke
-		let selected = d3.selectAll("." + props.name)
-			.style("stroke", "blue")
-			.style("stroke-width", "2");
+		let selected = d3.selectAll("." + props.NAMELSAD_MIN)
+			.style("stroke", "yellow")
+			.style("stroke-width", "6");
 
 		setLabel(props);
 	};
 
 	//Function to dehighlight enumeration units and bars
 	function dehighlight(props){
-		let selected = d3.selectAll("." + props.name)
+		let selected = d3.selectAll("." + props.NAMELSAD_MIN)
 			.style("stroke", function(){
 				return getStyle(this, "stroke")
 			})
@@ -409,12 +414,12 @@
 		let infoLabel = d3.select("body")
 			.append("div")
 			.attr("class", "infoLabel")
-			.attr("id", props.name + "_label")
+			.attr("id", props.NAMELSAD_MIN + "_label")
 			.html(labelAttribute);
 
-		let countryName = infoLabel.append("div")
-			.attr("class", "labelname")
-			.html(props.name);
+		let countyName = infoLabel.append("div")
+			.attr("class", "countyName")
+			.html(props.NAMELSAD);
 	};
 
 	//Function to move info label with mouse
@@ -440,35 +445,3 @@
 			.style("top", y + "px");
 	};
 })(); //Last line of main.js
-
-/*
-			.attr("x", function(d, i){
-				return i * (chartWidth / europeCountriesData.length) + leftPadding;
-			})
-			.attr("height", function(d){
-				return yScale(parseInt(d[expressed]));
-			})
-			.attr("y", function(d){
-				return 450 - yScale(parseInt(d[expressed])) + topBottomPadding;
-			})
-			.style("fill", function(d){
-				return choropleth(d, colorScale);
-			});
-
-
-
-
-			.attr("x", function(d, i){
-				return i * (chartInnerWidth / europeCountriesData.length) + leftPadding;
-			})
-		//Resize bars
-			.attr("height", function(d, i){
-				return 460 - yScale(parseInt(d[expressed]));
-			})
-			.attr("y", function(d, i){
-				return yScale(parseInt(d[expressed])) + topBottomPadding;
-			})
-		//Recolor bars
-			.style("fill", function(d){
-				return choropleth(d, colorScale);
-			});*/
