@@ -40,10 +40,10 @@
 		let path = d3.geoPath()
 			.projection(projection);
 		//Use promises instead of queue to parallelize asynchronous data loading
-		let zillowData = d3.csv("GEOG575-Lab2-d3/data/DMV_Counties_Joined.csv");
-		let dmvStatesTopo = d3.json("GEOG575-Lab2-d3/data/DMV_States.topojson");
-		let dmvMSATopo = d3.json("GEOG575-Lab2-d3/data/DMV_MSA.topojson");
-		let dmvCountiesTopo = d3.json("GEOG575-Lab2-d3/data/DMV_Counties_Min.topojson");
+		let zillowData = d3.csv("data/DMV_Counties_Joined.csv");
+		let dmvStatesTopo = d3.json("data/DMV_States.topojson");
+		let dmvMSATopo = d3.json("data/DMV_MSA.topojson");
+		let dmvCountiesTopo = d3.json("data/DMV_Counties_Min.topojson");
 		promises = [zillowData, dmvStatesTopo, dmvMSATopo, dmvCountiesTopo];
 		Promise.all(promises).then(function (values) {
 			let zillowData = values[0];
